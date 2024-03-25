@@ -68,14 +68,31 @@ app.MapPost(verifyEndpoint, async Task<Results<Ok<TokenResponse>, BadRequest<Err
     var code = data.Code;
 
     var externalKey = data.ExternalApiKey;
+
+    var externalVerificationKeyNameOverride = data.ExternalKeyName;
+    var externalVerificationKeyPositionOverride = data.ExternalKeyPosition switch
+    {
+        "HEADER" => KeyPosition.Header,
+        "FORM" => KeyPosition.Form,
+        "JSON" => KeyPosition.Json,
+        _ => KeyPosition.Null,
+    };
+
+    var currentVerificationKeyName = string.IsNullOrWhiteSpace(externalVerificationKeyNameOverride)
+        ? externalVerificationKeyName
+        : externalVerificationKeyNameOverride;
+    
+    var currentVerificationKeyPosition = externalVerificationKeyPositionOverride != KeyPosition.Null
+        ? externalVerificationKeyPositionOverride
+        : externalVerificationKeyPosition;
     
     
     var httpClientFactory = context.RequestServices.GetRequiredService<IHttpClientFactory>();
     var client = httpClientFactory.CreateClient();
 
     if (!string.IsNullOrEmpty(externalVerificationServerUrl) && externalVerificationServerMethod is not null &&
-        externalVerificationKeyPosition == KeyPosition.Null &&
-        !string.IsNullOrEmpty(externalVerificationKeyName) && externalVerificationResponseCode != -1)
+        currentVerificationKeyPosition != KeyPosition.Null &&
+        !string.IsNullOrEmpty(currentVerificationKeyName) && externalVerificationResponseCode != -1)
     {
         if (string.IsNullOrWhiteSpace(externalKey))
         {
@@ -89,15 +106,15 @@ app.MapPost(verifyEndpoint, async Task<Results<Ok<TokenResponse>, BadRequest<Err
                 { "Accept", "application/json" }
             }
         };
-        if (externalVerificationKeyPosition == KeyPosition.Header)
+        if (currentVerificationKeyPosition == KeyPosition.Header)
         {
-            externalRequest.Headers.Add(externalVerificationKeyName, externalKey);
+            externalRequest.Headers.Add(currentVerificationKeyName, externalKey);
         }
-        else if (externalVerificationKeyPosition == KeyPosition.Form)
+        else if (currentVerificationKeyPosition == KeyPosition.Form)
         {
             externalRequest.Content = new FormUrlEncodedContent(new List<KeyValuePair<string, string>>
             {
-                new(externalVerificationKeyName, externalKey)
+                new(currentVerificationKeyName, externalKey)
             });
         }
         else
@@ -105,7 +122,7 @@ app.MapPost(verifyEndpoint, async Task<Results<Ok<TokenResponse>, BadRequest<Err
             externalRequest.Content = 
                 new StringContent($$"""
                                     {
-                                        "{{externalVerificationKeyName}}": "{{externalKey}}"
+                                        "{{currentVerificationKeyName}}": "{{externalKey}}"
                                     }
                                     """);
         }
